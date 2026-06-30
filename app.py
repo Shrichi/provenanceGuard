@@ -55,8 +55,10 @@ def init_db():
 
 
 # ── Confidence scoring ─────────────────────────────────────────────────────────
-def compute_confidence(llm_score: float, structural_score: float) -> float:
-    return round((llm_score + structural_score) / 2, 4)
+def compute_confidence(llm_score: float, structural_score: float | None) -> float:
+    if structural_score is None:
+        return round(llm_score, 4)
+    return round(0.7 * llm_score + 0.3 * structural_score, 4)
 
 
 # ── Label generation ───────────────────────────────────────────────────────────

@@ -10,7 +10,7 @@ Measures holistic semantic and stylistic coherence, does the text read the way a
 
 Measure sthe structural/statiscal properteis, sentecne length variance, type-token ratio (vocabulary diversity), punctuation density. AI-generaed text tends to be more uniform while human writing tends to be more variable. Outputs a 0-1 score derived from combinign the aforementioned metrics. **Blind spot**: By just looking at form an AI-generated text that is explicitly told to have varying vocabulary choices or varying sentence length will likely pass this test.
 
-The combine probabilistic score will be a simple equal weight average of the two: `confidence = (llm_score + structural_score) / 2`. Equal weight is the chosen approach since the two signals are independent and there's no data on which is more reliable than the other. This is a good baseline approach for a starting point, not an optimal solution.
+The combined probabilistic score uses a weighted average: `confidence = 0.7 * llm_score + 0.3 * structural_score`. The LLM signal receives higher weight because the stylometric signal is less effective — surface-level metrics like sentence length variance and type-token ratio produce weak discrimination on short texts and can be easily mimicked by AI prompted to write casually, making it a useful corroborating signal but not a reliable primary classifier.
 
 ## Uncertainty Representation
 

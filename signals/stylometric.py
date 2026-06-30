@@ -1,21 +1,33 @@
 import re
 import math
 
+# Transitional and hedging phrases that appear far more often in AI writing
+# than in natural human prose
+_AI_CONNECTIVES = [
+    'furthermore', 'moreover', 'additionally', 'consequently', 'nevertheless',
+    'therefore', 'in conclusion', 'in summary', 'to summarize', 'in addition',
+    'it is important', 'it is worth', 'it should be noted', 'it is essential',
+    'it is necessary', 'it is crucial', 'it is equally', 'it is therefore',
+]
 
-def get_structural_score(text: str) -> float:
+
+def get_structural_score(text: str) -> float | None:
     """
-    Computes a stylometric score estimating AI likelihood based on:
-    - Sentence length uniformity (low variance = more AI-like)
-    - Type-token ratio (low vocabulary diversity = more AI-like)
-    - Formal punctuation density (more commas/semicolons = more AI-like)
+    Computes a stylometric score estimating AI likelihood based on five metrics:
+    1. Sentence length uniformity (low variance = more AI-like)
+    2. Type-token ratio (low vocabulary diversity = more AI-like)
+    3. Formal punctuation density (more commas/semicolons = more AI-like)
+    4. Average sentence length (longer sentences = more AI-like)
+    5. AI connective phrase density (formulaic transitions = more AI-like)
 
-    Returns a float between 0.0 (likely human) and 1.0 (likely AI).
+    Returns a float between 0.0 (likely human) and 1.0 (likely AI),
+    or None if the text is too short for reliable analysis.
     """
     sentences = [s.strip() for s in re.split(r'[.!?]+', text) if s.strip()]
     words = re.findall(r'\b\w+\b', text.lower())
 
     if len(sentences) < 2 or len(words) < 10:
-        return 0.5  # not enough text to analyze reliably
+        return None  # not enough text to analyze reliably
 
     # 1. Sentence length uniformity via coefficient of variation
     #    Low CV = uniform lengths = AI-like → high score
@@ -36,42 +48,32 @@ def get_structural_score(text: str) -> float:
     punct_density = formal_punct / len(words)
     punct_score = min(1.0, punct_density / 0.3)
 
-    structural_score = (uniformity_score + ttr_score + punct_score) / 3
+    # 4. Average sentence length
+    #    AI tends to write longer, denser sentences (20+ words each)
+    avg_len_score = min(1.0, mean_len / 20.0)
+
+    # 5. AI connective/hedge phrase density
+    #    Formulaic transitions are a strong AI marker
+    text_lower = text.lower()
+    hit_count = sum(1 for phrase in _AI_CONNECTIVES if phrase in text_lower)
+    connective_score = min(1.0, hit_count / 3.0)  # 3+ distinct phrases = max score
+
+    structural_score = (uniformity_score + ttr_score + punct_score + avg_len_score + connective_score) / 5
     return round(max(0.0, min(1.0, structural_score)), 4)
 
 
 if __name__ == "__main__":
     test_cases = [
         (
-            "clearly AI",
-            "Artificial intelligence represents a transformative paradigm shift in "
-            "modern society. It is important to note that while the benefits of AI "
-            "are numerous, it is equally essential to consider the ethical implications. "
-            "Furthermore, stakeholders across various sectors must collaborate to ensure "
-            "responsible deployment."
+            "clearly AI (long)",
+            "Artificial intelligence is fundamentally reshaping the nature of work across virtually every sector of the global economy. Automation technologies, powered by increasingly sophisticated machine learning algorithms, are displacing routine cognitive tasks that were once the exclusive domain of human workers. It is important to acknowledge that while this transformation creates significant economic disruption, it also generates new categories of employment that require higher-order skills and creative problem-solving abilities.\n\nThe educational implications of this technological shift are profound and far-reaching. Traditional pedagogical models, which prioritized the transmission of factual knowledge and the development of standardized procedural skills, are becoming increasingly inadequate in preparing students for the demands of an AI-driven labor market. Educational institutions must therefore undergo substantial reform to emphasize critical thinking, adaptability, and the capacity for continuous learning.\n\nFurthermore, the distributional consequences of AI-driven automation are likely to exacerbate existing socioeconomic inequalities if left unaddressed by policy interventions. Policymakers must therefore develop targeted support mechanisms, including robust retraining programs and expanded social safety nets, to mitigate these adverse distributional effects. In conclusion, the responsible development of artificial intelligence requires a holistic approach that addresses economic, educational, and governance dimensions simultaneously."
         ),
         (
-            "clearly human",
-            "ok so i finally tried that new ramen place downtown and honestly? "
-            "underwhelming. the broth was fine but they put WAY too much sodium in it "
-            "and i was thirsty for like three hours after. my friend got the spicy "
-            "version and said it was better. probably won't go back unless someone drags me there."
-        ),
-        (
-            "borderline formal human",
-            "The relationship between monetary policy and asset price inflation has been "
-            "extensively studied in the literature. Central banks face a fundamental tension "
-            "between their mandate for price stability and the unintended consequences of "
-            "prolonged low interest rates on equity and real estate valuations."
-        ),
-        (
-            "borderline lightly edited AI",
-            "I've been thinking a lot about remote work lately. There are genuine tradeoffs — "
-            "flexibility and no commute on one side, isolation and blurred work-life boundaries "
-            "on the other. Studies show productivity varies widely by individual and role type."
+            "clearly human (long)",
+            "i keep starting journals and abandoning them after like two weeks. not because i run out of things to say but because i reread what i wrote and it sounds nothing like how i actually think. written me is always somehow more composed and boring than real me, which is frustrating because the whole point was to capture something true.\n\nmaybe the problem is that writing forces you to finish your thoughts. when im just thinking i can trail off, backtrack, hold two contradictory things at once without resolving them. but the moment i write a sentence it has to go somewhere. it has to end. and the ending always feels like a lie because nothing in my head ever actually ends cleanly.\n\ntheres something almost embarrassing about how much i want to document my own life. like who do i think is going to read this. nobody. not even future me, probably, because future me will have moved on to new anxieties and wont care what current me was worried about."
         ),
     ]
 
     for label, text in test_cases:
         score = get_structural_score(text)
-        print(f"[{label}] structural_score = {score:.4f}")
+        print(f"[{label}] structural_score = {score}")
