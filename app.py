@@ -1,7 +1,7 @@
 import os
 import uuid
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime
 
 from flask import Flask, request, jsonify
 from flask_limiter import Limiter
@@ -85,7 +85,7 @@ def log_submission(content_id, creator_id, text, llm_score, structural_score,
             content_id,
             creator_id,
             text,
-            datetime.now(timezone.utc).isoformat(),
+            datetime.now().strftime("%Y-%m-%d %I:%M:%S %p"),
             llm_score,
             structural_score,
             confidence,
@@ -102,7 +102,7 @@ def get_log_entries(limit: int = 50):
                    structural_score, confidence, attribution, label,
                    status, appeal_reasoning, appeal_timestamp
             FROM submissions
-            ORDER BY timestamp DESC
+            ORDER BY rowid DESC
             LIMIT ?
         """, (limit,)).fetchall()
     return [dict(row) for row in rows]
@@ -157,6 +157,65 @@ def submit():
 def log():
     entries = get_log_entries()
     return jsonify({"entries": entries}), 200
+
+
+@app.route("/appeal", methods=["POST"])
+def appeal():
+    """
+    POST /appeal
+    Body: { "content_id": "...", "creator_id": "...", "creator_reasoning": "..." }
+
+    Verifies the creator owns the content, then marks it under_review
+    and logs the appeal reasoning alongside the original decision.
+    """
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be JSON"}), 400
+
+    content_id       = data.get("content_id", "").strip()
+    creator_id       = data.get("creator_id", "").strip()
+    creator_reasoning = data.get("creator_reasoning", "").strip()
+
+    if not content_id:
+        return jsonify({"error": "Missing required field: content_id"}), 400
+    if not creator_id:
+        return jsonify({"error": "Missing required field: creator_id"}), 400
+    if not creator_reasoning:
+        return jsonify({"error": "Missing required field: creator_reasoning"}), 400
+
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT creator_id, status FROM submissions WHERE content_id = ?",
+            (content_id,)
+        ).fetchone()
+
+        if row is None:
+            return jsonify({"error": "Content not found"}), 404
+
+        if row["creator_id"] != creator_id:
+            return jsonify({"error": "You are not the owner of this content"}), 403
+
+        if row["status"] == "under_review":
+            return jsonify({"error": "An appeal for this content is already under review"}), 409
+
+        conn.execute("""
+            UPDATE submissions
+            SET status           = 'under_review',
+                appeal_reasoning = ?,
+                appeal_timestamp = ?
+            WHERE content_id = ?
+        """, (
+            creator_reasoning,
+            datetime.now().strftime("%Y-%m-%d %I:%M:%S %p"),
+            content_id,
+        ))
+        conn.commit()
+
+    return jsonify({
+        "content_id": content_id,
+        "status": "under_review",
+        "message": "Your appeal has been received and is under review.",
+    }), 200
 
 
 # ── Startup ────────────────────────────────────────────────────────────────────
